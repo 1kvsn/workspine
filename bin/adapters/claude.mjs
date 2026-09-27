@@ -56,7 +56,7 @@ function renderClaudePlanSkill({ portableContractPath = '.agents/skills/work-pla
 
   const content = `---
 name: work-plan
-description: Claude-native Phase planning with fresh-context plan checking for GSDD
+description: Claude-native roadmap and bounded change planning with fresh-context plan checking for GSDD
 argument-hint: [phase-number]
 ---
 
@@ -71,8 +71,8 @@ Native Claude adapter rule:
 - Do NOT claim that other runtimes have the same behavior unless their own adapters explicitly implement and prove it.
 
 Execution flow:
-1. Read \`.work/SPEC.md\`, \`.work/ROADMAP.md\`, \`.work/config.json\`, relevant phase research, and any existing phase plan files.
-2. Resolve the target phase from the command arguments. If no phase is provided, choose the first roadmap phase that is not complete.
+1. Read \`.work/SPEC.md\` and \`.work/ROADMAP.md\` when present, \`.work/config.json\`, relevant phase research, and any existing phase plan files.
+2. Classify the target through the portable planning contract: a bounded multi-step change without a roadmap selects brownfield-change; a tiny self-contained change selects work-quick; an existing roadmap keeps phase selection. For brownfield use CHANGE.md as identity and plan body, HANDOFF.md as context-only, and the portable brownfield lifecycle commands in place of phase paths throughout this flow. Read SPEC/ROADMAP only when present.
 3. **Approach exploration** (before planning):
    a. Check \`.work/config.json\` for \`workflow.discuss\`. If \`false\` or missing, skip to step 4 and report \`reduced_alignment\` in the summary.
    b. Check if \`{phase_dir}/{padded_phase}-APPROACH.md\` exists. If it does, offer the user: "Use existing" / "Update it" / "View it". If "Use existing", load decisions, then validate the alignment proof before step 4; proofless or invalid existing APPROACH.md must be updated, not silently trusted.
@@ -89,7 +89,7 @@ Execution flow:
    - project config from \`.work/config.json\`, especially \`workflow.discuss\` and \`workflow.planCheck\`
    - approach decisions from \`.work/phases/*-APPROACH.md\` (if exists)
    - relevant phase research file(s)
-   - produced \`.work/phases/*-PLAN.md\` file(s)
+   - produced \`.work/brownfield-change/CHANGE.md\` for brownfield (Goal, scope, Done When, and Implementation Plan replace phase inputs), or \`.work/phases/*-PLAN.md\` file(s) for roadmap phases
    - the exact persisted \`lastDecisionsDigest\` snapshot from the successful plan preflight, if present, including an explicitly persisted empty snapshot
 8. Require the checker to return a single JSON object with this shape:
    {

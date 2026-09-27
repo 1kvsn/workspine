@@ -289,7 +289,7 @@ export function readBrownfieldChangeState(planningDir) {
   const doneWhenSection = extractMarkdownSection(changeArtifact.body, 'Done When');
   const doneWhen = markdownBullets(doneWhenSection).filter((line) => !/^observable outcomes?|^conditions that must be true/i.test(line));
   const currentStatus = extractBulletLabel(currentStatusSection, 'Current posture') || changeArtifact.frontmatter.status || null;
-  const normalizedStatus = String(currentStatus || '').trim().toLowerCase().replace(/[ -]+/g, '_');
+  const normalizedStatus = String(currentStatus || '').trim().replace(/^`([^`]+)`$/, '$1').toLowerCase().replace(/[ -]+/g, '_');
   const nextAction = collapseMarkdownSection(nextActionSection);
   const contractErrors = [];
   if (!extractMarkdownSection(changeArtifact.body, 'Goal').trim()) contractErrors.push('missing_goal');

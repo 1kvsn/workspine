@@ -1083,6 +1083,14 @@ function validateTransitionArtifact({ planningDir, target, planArg, artifactArg,
   const artifactKind = artifact ? lifecycleArtifactKind(artifact.path) : null;
   const planKind = plan ? lifecycleArtifactKind(plan.path) : null;
   const brownfieldChain = planKind === 'brownfield_plan';
+  if (planKind === 'plan' && ['approve', 'execute'].includes(target)) {
+    const brownfield = evaluateLifecycleState({ planningDir }).brownfieldChange;
+    if (brownfield.exists && brownfield.currentStatus !== 'closed') {
+      throw transitionErrorForCli('brownfield_plan_conflict',
+        'Active brownfield authority requires --plan .work/brownfield-change/CHANGE.md. Repair an unexecuted phase approval with lifecycle-transition plan on CHANGE.md, then record fresh owner approval.',
+        [plan.relative, stateLabel('brownfield-change', 'CHANGE.md')]);
+    }
+  }
   const artifactKindAllowed = target === 'verify' && brownfieldChain
     ? ['brownfield_verification', 'brownfield_plan'].includes(artifactKind)
     : targetKind === 'verification' && brownfieldChain

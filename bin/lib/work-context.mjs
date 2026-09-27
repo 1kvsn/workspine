@@ -326,7 +326,16 @@ export function transitionWorkflowState(workDir, {
 
   const expectedPlan = planPath || planIdentity;
   const recordedPlan = workflow.plan.path || workflow.plan.identity || null;
-  if (recordedPlan && expectedPlan && recordedPlan !== expectedPlan) {
+  // Recover the historical phase-path brownfield approval through the existing
+  // plan transition. Execution/evidence cannot be transferred to another chain.
+  const repairBrownfieldApproval = normalizedTarget === 'plan'
+    && authority === 'workflow' && typeof preWriteGuard === 'function'
+    && expectedPlan === '.work/brownfield-change/CHANGE.md'
+    && /^\.work\/phases\/.+-PLAN\.md$/i.test(recordedPlan || '')
+    && workflow.current_state === 'plan'
+    && workflow.execution.status === 'not_started'
+    && !workflow.execution.artifact && !workflow.verification.artifact;
+  if (recordedPlan && expectedPlan && recordedPlan !== expectedPlan && !repairBrownfieldApproval) {
     throw transitionError('stale_state', 'Recorded plan authority does not match the supplied plan artifact.', [String(recordedPlan), String(expectedPlan)]);
   }
   if (artifactPath && artifactIdentity) {
@@ -399,6 +408,7 @@ export function transitionWorkflowState(workDir, {
     delete next.workflow.plan.approved_sha256;
     next.workflow.execution.status = 'not_started';
     next.workflow.current_state = 'plan';
+    if (repairBrownfieldApproval) next.workflow.approval_ref = null;
   } else if (effectiveTarget === 'execute') {
     if (!explicitOwnerApproval && !durableOwnerApproval) {
       throw transitionError('not_approved', 'The plan artifact is not approved; approve the plan before execution.', [normalizedPlan || '.work/state.json']);

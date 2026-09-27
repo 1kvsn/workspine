@@ -12,6 +12,20 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 
 const ROOT = path.join(__dirname, '..');
+
+test('S8 workflow brownfield commands and plan body use CHANGE.md', () => {
+  for (const name of ['plan', 'execute']) {
+    const text = fs.readFileSync(path.join(ROOT, 'distilled/workflows', `${name}.md`), 'utf8');
+    for (const verb of ['plan', 'approve', 'execute', 'verify', 'audit']) {
+      assert.ok(text.includes(`lifecycle-transition ${verb} --plan .work/brownfield-change/CHANGE.md`), `${name}: ${verb}`);
+    }
+    assert.match(text, /## Implementation Plan/);
+    assert.match(text, /HANDOFF.md.*context-only/);
+  }
+  const plan = fs.readFileSync(path.join(ROOT, 'distilled/workflows/plan.md'), 'utf8');
+  assert.match(plan, /repair[\s\S]*lifecycle-transition plan --plan .work\/brownfield-change\/CHANGE.md/i);
+  assert.match(plan, /produced.*CHANGE.md/);
+});
 const GSDD_PATH = path.join(ROOT, 'bin', 'gsdd.mjs');
 const MODELS_MODULE = path.join(ROOT, 'bin', 'lib', 'config.mjs');
 const MANIFEST_MODULE = path.join(ROOT, 'bin', 'lib', 'manifest.mjs');
@@ -4743,4 +4757,22 @@ describe('Phase 16-D - global update and health routes', () => {
     assert.doesNotMatch(docs, /(?:use|rerun)[^.\n]*--auto[^.\n]*(?:repair|refresh)/i,
       '--auto must not be documented as generic global repair for existing homes.');
   });
+});
+
+
+test('S8 plan classifies plain requests across the three existing lanes', () => {
+  const plan = fs.readFileSync(path.join(ROOT, 'distilled/workflows/plan.md'), 'utf8');
+  assert.match(plan, /self-contained tiny change[\s\S]*work-quick/);
+  assert.match(plan, /no.*ROADMAP.md.*bounded multi-step change.*brownfield-change/);
+  assert.match(plan, /existing roadmap.*phase behaviour/);
+});
+
+
+test('S8 Claude planning and pause preserve the brownfield identity', () => {
+  const adapter = fs.readFileSync(path.join(ROOT, 'bin/adapters/claude.mjs'), 'utf8');
+  assert.match(adapter, /bounded multi-step[\s\S]*brownfield-change/);
+  assert.match(adapter, /produced.*CHANGE.md/);
+  const pause = fs.readFileSync(path.join(ROOT, 'distilled/workflows/pause.md'), 'utf8');
+  assert.match(pause, /brownfield-change\/CHANGE.md/);
+  assert.match(pause, /approved CHANGE.md bytes/);
 });

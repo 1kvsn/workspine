@@ -17,7 +17,7 @@ import {
   findCheckpointWitness,
   findNetworkViolation,
 } from './codex.mjs';
-import { approvePlan, runJourney, validateTopology } from './journey.mjs';
+import { observeApproval, runJourney, validateTopology } from './journey.mjs';
 import {
   assertCandidateBinding,
   assertSyntheticBaseline,
@@ -489,7 +489,7 @@ test('journey order is plan, pause, approval, fresh B, verify, progress', async 
   const calls = [];
   const records = new Map();
   const sessions = {
-    'a-plan': 'A', 'a-pause': 'A',
+    'a-plan': 'A', 'a-pause': 'A', approval: 'A',
     'b-resume-execute': 'B', 'c-verify': 'C', 'c-progress': 'C',
   };
   const transport = { runTurn: async turn => {
@@ -497,17 +497,17 @@ test('journey order is plan, pause, approval, fresh B, verify, progress', async 
     calls.push(`turn:${turn.id}`);
     return { outcome: 'completed', sessionId: sessions[turn.id], turnId: `${turn.id}-id`, totalTokens: null };
   } };
-  const result = await runJourney({
+  const result = await runJourney({ observePlanSelection: () => ({ ok: true }),
     transport,
     captureCheckpoint: () => ({ path: '.work/.continue-here.md', sha256: 'c'.repeat(64) }),
-    approve: ({ checkpoint }) => { calls.push('approval'); return { ok: true, checkpoint_sha256: checkpoint.sha256 }; },
+    observeApproval: ({ checkpoint }) => { calls.push('approval'); return { ok: true, checkpoint_sha256: checkpoint.sha256 }; },
     checkpointWitness: () => ({ ok: true, output_sha256: 'c'.repeat(64) }),
     hardTimeoutMs: 321,
     record: (id, value) => records.set(id, value),
   });
   assert.equal(result.outcome, 'completed');
   assert.deepEqual(calls, [
-    'turn:a-plan', 'turn:a-pause', 'approval',
+    'turn:a-plan', 'turn:a-pause', 'turn:approval', 'approval',
     'turn:b-resume-execute', 'turn:c-verify', 'turn:c-progress',
   ]);
   assert.equal(records.get('b-resume-execute').checkpoint_witness.ok, true);
@@ -519,14 +519,14 @@ test('journey rejects approval checkpoint mutation without dependent turns', asy
     calls.push(turn.id);
     return { outcome: 'completed', sessionId: 'A', turnId: turn.id };
   } };
-  const result = await runJourney({
+  const result = await runJourney({ observePlanSelection: () => ({ ok: true }),
     transport,
     captureCheckpoint: () => ({ path: '.work/.continue-here.md', sha256: 'a'.repeat(64) }),
-    approve: () => ({ ok: true, checkpoint_sha256: 'b'.repeat(64) }),
+    observeApproval: () => ({ ok: true, checkpoint_sha256: 'b'.repeat(64) }),
     checkpointWitness: () => ({ ok: true }),
   });
   assert.equal(result.outcome, 'protocol_invalid');
-  assert.deepEqual(calls, ['a-plan', 'a-pause']);
+  assert.deepEqual(calls, ['a-plan', 'a-pause', 'approval']);
 });
 
 test('journey stops before approval when session A identity drifts', async () => {
@@ -535,14 +535,14 @@ test('journey stops before approval when session A identity drifts', async () =>
     calls.push(turn.id);
     return { outcome: 'completed', sessionId: turn.id === 'a-plan' ? 'A' : 'wrong', turnId: turn.id };
   } };
-  const result = await runJourney({ transport,
+  const result = await runJourney({ observePlanSelection: () => ({ ok: true }), transport,
     captureCheckpoint: () => ({ sha256: 'a'.repeat(64) }),
-    approve: () => { calls.push('approval'); return { ok: true, checkpoint_sha256: 'a'.repeat(64) }; } });
+    observeApproval: () => { calls.push('approval'); return { ok: true, checkpoint_sha256: 'a'.repeat(64) }; } });
   assert.equal(result.outcome, 'protocol_invalid');
   assert.deepEqual(calls, ['a-plan', 'a-pause']);
 });
 
-test('provider-free approval uses the real generated lifecycle command and persists exact state', t => {
+test('provider-free agent approval is graded read-only against generated lifecycle state', t => {
   const root = tempRoot(t), entry = path.resolve('bin', 'gsdd.mjs');
   const run = args => spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', shell: false, windowsHide: true });
   let result = run([entry, 'init', '--auto', '--tools', 'agents', '--no-update-notice']);
@@ -567,7 +567,9 @@ test('provider-free approval uses the real generated lifecycle command and persi
   assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
   const checkpoint = '---\nworkflow: brownfield-change\n---\n\nResume the approved bounded change.\n';
   fs.writeFileSync(path.join(root, '.work', '.continue-here.md'), checkpoint);
-  const approval = approvePlan({ consumerRoot: root,
+  result = run([path.join(root, '.work/bin/gsdd.mjs'), 'lifecycle-transition', 'approve', '--plan', '.work/brownfield-change/CHANGE.md', '--authority', 'owner', '--approval-ref', 'owner-frozen-eval-approval', '--json']);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const approval = observeApproval({ consumerRoot: root,
     checkpoint: { sha256: sha256(checkpoint) }, approvalRef: 'owner-frozen-eval-approval' });
   assert.equal(approval.ok, true);
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, '.work', 'state.json'), 'utf8')).workflow.plan.approved, true);
@@ -718,4 +720,47 @@ test('calibration accepts only baseline-red witness-green mutant-red controls', 
     executable: process.execPath, args: ['-e', `process.stdout.write(${JSON.stringify(JSON.stringify(payload))})`],
   } }));
   await assert.rejects(main(['calibrate', '--case', file]), /calibration controls failed/);
+});
+
+
+test('S8 plain request exposes lane selection and approval is a chat turn', async () => {
+  const { buildPrompts } = await import('./journey.mjs');
+  const prompts = buildPrompts({ approvalRef: 'owner-s8b' });
+  assert.doesNotMatch(prompts['a-plan'], /brownfield|work-plan|CHANGE\.md/i);
+  assert.match(prompts.approval || '', /I approve/);
+  assert.match(prompts.approval || '', /owner-s8b/);
+  assert.doesNotMatch(prompts.approval || '', /--plan|CHANGE\.md/);
+  const source = fs.readFileSync(new URL('./journey.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /command\(process.execPath/);
+});
+
+test('S8 approval grader rejects a phase-path approval without changing state', async t => {
+  const { observeApproval } = await import('./journey.mjs');
+  assert.equal(typeof observeApproval, 'function');
+  const root = tempRoot(t);
+  fs.mkdirSync(path.join(root, '.work'), { recursive: true });
+  const state = { workflow: { authority: 'owner', approval_ref: 'owner-s8b', plan: {
+    approved: true, path: '.work/phases/brownfield-change/01-PLAN.md', identity: '.work/phases/brownfield-change/01-PLAN.md'
+  } } };
+  const file = path.join(root, '.work/state.json');
+  fs.writeFileSync(file, JSON.stringify(state));
+  const before = fs.readFileSync(file);
+  const grade = observeApproval({ consumerRoot: root, approvalRef: 'owner-s8b' });
+  assert.equal(grade.ok, false);
+  assert.equal(grade.reason, 'approval_plan_identity');
+  assert.deepEqual(fs.readFileSync(file), before);
+});
+
+
+test('S8 lane grader rejects phase selection before owner approval', async t => {
+  const { observePlanSelection } = await import('./grade.mjs');
+  assert.equal(typeof observePlanSelection, 'function');
+  const root = tempRoot(t), file = path.join(root, '.work/state.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  for (const plan of ['.work/phases/01/01-PLAN.md', '.work/brownfield-change/CHANGE.md']) {
+    fs.writeFileSync(file, JSON.stringify({ workflow: { plan: { path: plan, identity: plan, approved: false } } }));
+    const grade = observePlanSelection(root);
+    assert.equal(grade.ok, plan.endsWith('/CHANGE.md'));
+    assert.equal(grade.plan_path, plan);
+  }
 });

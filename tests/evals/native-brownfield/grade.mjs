@@ -56,6 +56,12 @@ export function observeWorkflow(consumerRoot, approvalRef) {
     verification_status: workflow?.verification?.status || null,
   } : null };
 }
+export function observePlanSelection(consumerRoot) {
+  let plan;
+  try { plan = JSON.parse(fs.readFileSync(path.join(consumerRoot, '.work/state.json'), 'utf8')).workflow?.plan; } catch {}
+  return { ok: plan?.path === '.work/brownfield-change/CHANGE.md' && plan?.identity === plan.path,
+    plan_path: plan?.path || null, plan_identity: plan?.identity || null };
+}
 export function runOracle(consumerRoot, oracle) {
   if (!oracle?.executable || !Array.isArray(oracle.args)) throw new EvalError('evaluator_invalid', 'oracle command is missing');
   const result = command(oracle.executable, oracle.args.map(value => String(value).replaceAll('{root}', path.resolve(consumerRoot))), {
