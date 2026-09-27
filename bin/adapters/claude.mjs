@@ -6,7 +6,7 @@ import {
   CHECKER_STATUSES,
 } from '../lib/plan-constants.mjs';
 import { localizeStateDirReferences } from '../lib/rendering.mjs';
-import { SUBAGENT_IDS } from '../lib/workflows.mjs';
+import { SUBAGENT_IDS, WORKFLOWS } from '../lib/workflows.mjs';
 
 const SOURCE_FILE = 'bin/adapters/claude.mjs';
 
@@ -56,7 +56,7 @@ function renderClaudePlanSkill({ portableContractPath = '.agents/skills/work-pla
 
   const content = `---
 name: work-plan
-description: Claude-native roadmap and bounded change planning with fresh-context plan checking for GSDD
+description: ${WORKFLOWS.find(({ name }) => name === 'work-plan').description}
 argument-hint: [phase-number]
 ---
 
@@ -126,7 +126,7 @@ Never return raw checker JSON without summarizing it.
 
 function renderClaudePlanCommand({ skillPath = '.claude/skills/work-plan/SKILL.md' } = {}) {
   return `---
-description: Compatibility alias for the Claude-native \`/work-plan\` skill
+description: Compatibility alias - ${WORKFLOWS.find(({ name }) => name === 'work-plan').description}
 argument-hint: [phase-number]
 allowed-tools: Read
 ---

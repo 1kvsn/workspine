@@ -25,6 +25,44 @@ describe('specialized plan adapter surfaces', () => {
     cleanup(tmpDir);
   });
 
+  test('E every rendered lane description carries its routing signals', async () => {
+    const restoreStdin = setNonInteractiveStdin();
+    try {
+      const gsdd = await loadGsdd(tmpDir);
+      await gsdd.cmdInit('--tools', 'claude,codex,opencode,agents');
+    } finally {
+      restoreStdin();
+    }
+
+    const signals = {
+      'work-plan': [/multi-step change/i, /existing codebase/i, /with or without a roadmap/i, /owner-approved plan/i, /session break/i],
+      'work-quick': [/one small self-contained task/i, /at most 3 tasks/i, /one sitting/i, /no owner decision.*survive a break/i, /otherwise.*work-plan/i],
+      'work-new-project': [/new product/i, /fuzzy or broad scope from scratch/i],
+      'work-new-milestone': [/next milestone/i, /already has SPEC.*ROADMAP/i],
+      'work-execute': [/execute/i, /approved.*bounded change/i, /phase/i],
+      'work-verify': [/verify/i, /approved.*bounded change/i, /phase/i],
+    };
+    const failures = [];
+    for (const [name, patterns] of Object.entries(signals)) {
+      const surfaces = [
+        `.agents/skills/${name}/SKILL.md`,
+        `.claude/skills/${name}/SKILL.md`,
+        `.opencode/commands/${name}.md`,
+        ...(name === 'work-plan' ? ['.claude/commands/work-plan.md'] : []),
+      ];
+      for (const surface of surfaces) {
+        const content = fs.readFileSync(path.join(tmpDir, surface), 'utf8');
+        const description = content.match(/^description: (.+)$/m)?.[1];
+        assert.ok(description, `${surface} must have a one-line description`);
+        assert.doesNotMatch(description, /^[>|]/, `${surface} must not use a multiline description`);
+        for (const pattern of patterns) {
+          if (!pattern.test(description)) failures.push(`${surface}: missing ${pattern}`);
+        }
+      }
+    }
+    assert.deepStrictEqual(failures, [], failures.join('\n'));
+  });
+
   test('claude plan skill is the primary native surface and stays out of forked subagent mode', async () => {
     const restoreStdin = setNonInteractiveStdin();
     try {

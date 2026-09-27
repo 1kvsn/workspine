@@ -4767,6 +4767,18 @@ test('S8 plan classifies plain requests across the three existing lanes', () => 
   assert.match(plan, /existing roadmap.*phase behaviour/);
 });
 
+test('E quick and plan share the same boundary and route overflow to work-plan', () => {
+  const boundary = 'Use `/work-quick` for one small self-contained task with at most 3 tasks, finished in one sitting, with no owner decision that must survive a break; otherwise use `/work-plan`.';
+  for (const name of ['quick', 'plan']) {
+    const content = fs.readFileSync(path.join(ROOT, `distilled/workflows/${name}.md`), 'utf8');
+    assert.ok(content.includes(boundary), `${name}.md must carry the shared boundary verbatim`);
+    assert.doesNotMatch(content, /one local edit|Quick tasks are for sub-hour work/);
+  }
+  const quick = fs.readFileSync(path.join(ROOT, 'distilled/workflows/quick.md'), 'utf8');
+  const scope = quick.split('## Step 3.6:')[1].split('## Step 3.7:')[0];
+  assert.match(scope, /more than 3 tasks[\s\S]*one sitting[\s\S]*owner-approved plan[\s\S]*survive a break[\s\S]*not a quick task[\s\S]*stop[\s\S]*\/work-plan/i);
+});
+
 
 test('S8 Claude planning and pause preserve the brownfield identity', () => {
   const adapter = fs.readFileSync(path.join(ROOT, 'bin/adapters/claude.mjs'), 'utf8');
