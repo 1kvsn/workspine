@@ -217,6 +217,24 @@ test('S8 accepts a backticked brownfield posture', async () => {
   assert.strictEqual(result.lifecycle.brownfieldChange.status, 'active');
 });
 
+test('E a backticked closed sibling is not an active stream', async () => {
+  await initWork();
+  writeFile('.work/brownfield-change/CHANGE.md', brownfieldChange());
+  const sibling = '.work/brownfield-change-old/CHANGE.md';
+  for (const posture of ['closed', '`closed`', '`CLOSED`']) {
+    writeFile(sibling, brownfieldChange({ posture }));
+    const result = await runJson(['lifecycle-preflight', 'plan', 'brownfield-change']);
+    assert.strictEqual(result.allowed, true, `${posture}: ${JSON.stringify(result)}`);
+  }
+  for (const posture of ['active', '`active`', '`closed', 'closed`', '`closed` pending']) {
+    writeFile(sibling, brownfieldChange({ posture }));
+    const result = await runCliAsMain(tmpDir, ['lifecycle-preflight', 'plan', 'brownfield-change']);
+    const packet = JSON.parse(result.output);
+    assert.strictEqual(packet.allowed, false, `${posture}: ${result.output}`);
+    assert.strictEqual(packet.reason, 'brownfield_contract_invalid');
+  }
+});
+
 function writeCheckpoint(content) {
   writeFile('.work/.continue-here.md', content);
 }

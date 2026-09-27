@@ -253,7 +253,7 @@ export function readBrownfieldChangeState(planningDir) {
       .filter((entry) => entry.isDirectory() && /^brownfield-change(?:-|\d)/i.test(entry.name) && entry.name.toLowerCase() !== BROWNFIELD_CHANGE_DIR)
       .map((entry) => join(planningDir, entry.name, 'CHANGE.md'))
       .filter((candidate) => existsSync(candidate))
-      .filter((candidate) => !/^\s*-\s*Current posture:\s*closed\s*$/im.test(readTextIfExists(candidate)))
+      .filter((candidate) => !/^\s*-\s*Current posture:\s*(?:closed|`closed`)\s*$/im.test(readTextIfExists(candidate)))
     : [];
 
   if (!existsSync(changePath)) {
